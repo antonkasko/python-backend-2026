@@ -27,7 +27,7 @@ async def get_cart_list(
     max_quantity: Annotated[NonNegativeInt | None, Query()] = None
     ) -> list[CartResponse]:
     return [CartResponse.from_entity(e) 
-            for e in store.get_many(offset, limit, min_price, max_price, min_quantity, max_quantity)]
+            for e in await store.get_many(offset, limit, min_price, max_price, min_quantity, max_quantity)]
 
 
 @router.get(
@@ -42,7 +42,7 @@ async def get_cart_list(
     },
 )
 async def get_cart_by_id(id: int) -> CartResponse:
-    entity = store.get_one(id)
+    entity = await store.get_one(id)
 
     if not entity:
         raise HTTPException(
@@ -58,7 +58,7 @@ async def get_cart_by_id(id: int) -> CartResponse:
     status_code=HTTPStatus.CREATED,
 )
 async def post_cart(response: Response) -> CreateCartResponse:
-    _id = store.add()
+    _id = await store.add()
 
     # as REST states one should provide uri to newly created resource in location header
     response.headers["location"] = f"/cart/{_id}"
@@ -79,14 +79,14 @@ async def post_cart(response: Response) -> CreateCartResponse:
     },
 )
 async def add_item_to_cart(cart_id: int, item_id: int) -> CartResponse:
-    new_item = item_store.get_one(item_id)
+    new_item = await item_store.get_one(item_id)
     if new_item is None:
         raise HTTPException(
             HTTPStatus.NOT_FOUND,
             f"Cart {cart_id} was not found",
         )
     
-    entity = store.add_item(cart_id, new_item)
+    entity = await store.add_item(cart_id, new_item)
     if entity is None:
         raise HTTPException(
             HTTPStatus.NOT_FOUND,

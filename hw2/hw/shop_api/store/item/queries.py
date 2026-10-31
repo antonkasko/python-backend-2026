@@ -1,87 +1,98 @@
 from typing import Iterable
 
-from shop_api.store.item.models import (
-    ItemInfo,
-    ItemEntity,
-    PatchItemInfo
-)
+from sqlalchemy import select
 
-_data = dict[int, ItemInfo]()
+from shop_api.database import ItemTable, SessionFactory
+from shop_api.store.item.models import ItemInfo, ItemEntity, PatchItemInfo
 
 
-def int_id_generator() -> Iterable[int]:
-    i = 0
-    while True:
-        yield i
-        i += 1
+def _to_entity(row: ItemTable) -> ItemEntity:
+    return ItemEntity(row.id, ItemInfo(row.name, row.price, row.deleted))
 
 
-_id_generator = int_id_generator()
+async def add(info: ItemInfo) -> ItemEntity:
+    async with SessionFactory() as session:
+        row = ItemTable(name=info.name, price=info.price, deleted=info.deleted)
+        session.add(row)
+        await session.commit()
+        await session.refresh(row)
+        return _to_entity(row)
 
 
-def add(info: ItemInfo) -> ItemEntity:
-    _id = next(_id_generator)
-    _data[_id] = info
-
-    return ItemEntity(_id, info)
-
-
-def delete(id: int) -> bool:
-    if id not in _data:
-        return False
-    _data[id].deleted = True
-    return True
+async def delete(id: int) -> bool:
+    async with SessionFactory() as session:
+        row = await session.get(ItemTable, id)
+        if row is None:
+            return False
+        row.deleted = True
+        await session.commit()
+        return True
 
 
-def get_one(id: int) -> ItemEntity | None:
-    if id not in _data or _data[id].deleted:
-        return None
-
-    return ItemEntity(id=id, info=_data[id])
-
-
-def get_many(offset: int = 0, 
-             limit: int = 10, 
-             min_price: float | None = None,
-             max_price: float | None = None,
-             show_deleted: bool = False) -> Iterable[ItemEntity]:
-    curr = 0
-    for id, info in _data.items():
-        if all((offset <= curr < offset + limit,
-               min_price is None or info.price >= min_price,
-               max_price is None or info.price <= max_price,
-               show_deleted or not info.deleted)):
-            yield ItemEntity(id, info)
-
-        curr += 1
+async def get_one(id: int) -> ItemEntity | None:
+    async with SessionFactory() as session:
+        row = await session.get(ItemTable, id)
+        if row is None or row.deleted:
+            return None
+        return _to_entity(row)
 
 
-def update(id: int, info: ItemInfo) -> ItemEntity | None:
-    if id not in _data:
-        return None
+async def get_many(
+    offset: int = 0,
+    limit: int = 10,
+    min_price: float | None = None,
+    max_price: float | None = None,
+    show_deleted: bool = False,
+) -> list[ItemEntity]:
+    statement = select(ItemTable).order_by(ItemTable.id).offset(offset).limit(limit)
+    if min_price is not None:
+        statement = statement.where(ItemTable.price >= min_price)
+    if max_price is not None:
+        statement = statement.where(ItemTable.price <= max_price)
+    if not show_deleted:
+        statement = statement.where(ItemTable.deleted.is_(False))
 
-    _data[id] = info
-
-    return ItemEntity(id=id, info=info)
-
-
-def upsert(id: int, info: ItemInfo) -> ItemEntity:
-    _data[id] = info
-
-    return ItemEntity(id=id, info=info)
+    async with SessionFactory() as session:
+        rows = (await session.scalars(statement)).all()
+        return [_to_entity(row) for row in rows]
 
 
-def patch(id: int, patch_info: PatchItemInfo) -> ItemEntity | None:
-    if id not in _data:
-        return None
-    
-    if _data[id].deleted:
-        return None
-    
-    if patch_info.name is not None:
-        _data[id].name = patch_info.name
+async def update(id: int, info: ItemInfo) -> ItemEntity | None:
+    async with SessionFactory() as session:
+        row = await session.get(ItemTable, id)
+        if row is None:
+            return None
+        row.name = info.name
+        row.price = info.price
+        await session.commit()
+        await session.refresh(row)
+        return _to_entity(row)
 
-    if patch_info.price is not None:
-        _data[id].price = patch_info.price
 
-    return ItemEntity(id=id, info=_data[id])
+async def upsert(id: int, info: ItemInfo) -> ItemEntity:
+    async with SessionFactory() as session:
+        row = await session.get(ItemTable, id)
+        if row is None:
+            row = ItemTable(id=id, name=info.name, price=info.price, deleted=info.deleted)
+            session.add(row)
+        else:
+            row.name = info.name
+            row.price = info.price
+            row.deleted = info.deleted
+        await session.commit()
+        await session.refresh(row)
+        return _to_entity(row)
+
+
+async def patch(id: int, patch_info: PatchItemInfo) -> ItemEntity | None:
+    async with SessionFactory() as session:
+        row = await session.get(ItemTable, id)
+        if row is None or row.deleted:
+            return None
+        if patch_info.name is not None:
+            row.name = patch_info.name
+        if patch_info.price is not None:
+            row.price = patch_info.price
+        await session.commit()
+        await session.refresh(row)
+        return _to_entity(row)

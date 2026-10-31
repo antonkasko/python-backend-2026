@@ -1,6 +1,7 @@
 # Основные зависимости для ASGI приложения
 fastapi>=0.117.1
 uvicorn>=0.24.0
+httpx2
 
 # Зависимости для тестирования
 pytest>=7.4.0
@@ -10,3 +11,7 @@ Faker>=37.8.0
 
 # Prometheus metrics for FastAPI
 prometheus-fastapi-instrumentator>=8.0.1,<9
+
+# Async SQLite database access
+SQLAlchemy>=2.0,<3
+aiosqlite>=0.20,<1

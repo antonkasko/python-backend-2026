@@ -24,7 +24,7 @@ async def get_item_list(
     show_deleted: Annotated[bool, Query()] = False
     ) -> list[ItemResponse]:
     return [ItemResponse.from_entity(e) 
-            for e in store.get_many(offset, limit, min_price, max_price, show_deleted)]
+            for e in await store.get_many(offset, limit, min_price, max_price, show_deleted)]
 
 
 @router.get(
@@ -39,7 +39,7 @@ async def get_item_list(
     },
 )
 async def get_item_by_id(id: int) -> ItemResponse:
-    entity = store.get_one(id)
+    entity = await store.get_one(id)
 
     if not entity:
         raise HTTPException(
@@ -55,7 +55,7 @@ async def get_item_by_id(id: int) -> ItemResponse:
     status_code=HTTPStatus.CREATED,
 )
 async def post_item(info: ItemRequest, response: Response) -> ItemResponse:
-    entity = store.add(info.as_item_info())
+    entity = await store.add(info.as_item_info())
 
     # as REST states one should provide uri to newly created resource in location header
     response.headers["location"] = f"/item/{entity.id}"
@@ -75,7 +75,7 @@ async def post_item(info: ItemRequest, response: Response) -> ItemResponse:
     },
 )
 async def patch_item(id: int, info: PatchItemRequest) -> ItemResponse:
-    entity = store.patch(id, info.as_patch_item_info())
+    entity = await store.patch(id, info.as_patch_item_info())
 
     if entity is None:
         raise HTTPException(
@@ -103,9 +103,9 @@ async def put_item(
     upsert: Annotated[bool, Query()] = False,
 ) -> ItemResponse:
     entity = (
-        store.upsert(id, info.as_item_info())
+        await store.upsert(id, info.as_item_info())
         if upsert
-        else store.update(id, info.as_item_info())
+        else await store.update(id, info.as_item_info())
     )
 
     if entity is None:
@@ -119,7 +119,7 @@ async def put_item(
 
 @router.delete("/{id}")
 async def delete_item(id: int) -> Response:
-    if not store.delete(id):
+    if not await store.delete(id):
         raise HTTPException(
             HTTPStatus.OK,
             f"Requested resource /item/{id} was not found",
