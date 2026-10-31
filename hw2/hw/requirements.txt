@@ -13,5 +13,5 @@ Faker>=37.8.0
 prometheus-fastapi-instrumentator>=8.0.1,<9
 
 # Async SQLite database access
-SQLAlchemy>=2.0,<3
+sqlalchemy[asyncio]>=2.0
 aiosqlite>=0.20,<1
